@@ -30,12 +30,6 @@ ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
 # shellcheck source=scripts/common.sh
 source "$ROOT"/scripts/common.sh
 
-# We have to delete the dataset before the Terraform
-# Otherwise we will run into the following error
-# "google_bigquery_dataset.gke-bigquery-dataset: googleapi:
-# Error 400: Dataset pso-helmsman-cicd-infra:gke_logs_dataset is still in use, resourceInUse"
-bq rm -r -f "${PROJECT}":"${BQ_LOG_DS}"
-
 # Tear down Terraform-managed resources and remove generated tfvars
 cd "$ROOT/terraform" && terraform destroy -input=false -auto-approve
 rm -f "$ROOT/terraform/terraform.tfvars"
