@@ -14,6 +14,6 @@ cd deploy
 git init
 git remote add -f origin https://github.com/vansoncrasta/gcp-examples
 git config core.sparseCheckout true
-git sparse-checkout set gke-public-cluster
+git sparse-checkout set gcp-examples/gke-public-cluster
 git pull origin master
 ```
