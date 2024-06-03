@@ -4,8 +4,9 @@ Example to deploy GKE public cluster
 ```
 gcloud config set project PROJECT_ID
 
-gcloud config set compute/region asia-south1
-gcloud config set compute/zone asia-south1-c
+gcloud config set compute/region us-central1
+gcloud config set compute/zone us-central1-c
+
 ```
 
 ```
@@ -22,4 +23,6 @@ cd gke-public-cluster
 
 ```
 make create
+make validate
+make teardown
 ```
