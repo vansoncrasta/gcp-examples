@@ -1,0 +1,124 @@
+/*
+Copyright 2024
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    https://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+///////////////////////////////////////////////////////////////////////////////////////
+//
+// This configuration will create a GKE cluster 
+//
+///////////////////////////////////////////////////////////////////////////////////////
+
+// Provides access to available Google Container Engine versions in a zone for a given project.
+// https://www.terraform.io/docs/providers/google/d/google_container_engine_versions.html
+data "google_container_engine_versions" "on-prem" {
+  location = var.zone
+  project  = var.project
+}
+
+///////////////////////////////////////////////////////////////////////////////////////
+// Create the resources needed for GKE
+///////////////////////////////////////////////////////////////////////////////////////
+
+///////////////////////////////////////////////////////////////////////////////////////
+// Create the primary cluster for this project.
+///////////////////////////////////////////////////////////////////////////////////////
+
+// Create the GKE Cluster
+// https://www.terraform.io/docs/providers/google/d/google_container_cluster.html
+resource "google_container_cluster" "primary" {
+  name               = "gke-public-cluster-example"
+  location           = var.zone
+  initial_node_count = 2
+  min_master_version = data.google_container_engine_versions.on-prem.latest_master_version
+
+  node_config {
+    oauth_scopes = [
+      "https://www.googleapis.com/auth/compute",
+      "https://www.googleapis.com/auth/devstorage.read_only",
+      "https://www.googleapis.com/auth/logging.write",
+      "https://www.googleapis.com/auth/monitoring",
+    ]
+  }
+
+  // These local-execs are used to provision the sample service using Kubernetes manifests
+  provisioner "local-exec" {
+    command = "gcloud container clusters get-credentials ${google_container_cluster.primary.name} --zone ${google_container_cluster.primary.location} --project ${var.project}"
+  }
+
+  provisioner "local-exec" {
+    command = "kubectl apply -f ../k8s/hello-server.yaml"
+  }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////
+// Create Pub/Sub resources
+///////////////////////////////////////////////////////////////////////////////////////
+
+// Create a Pub/Sub topic
+// https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/pubsub_topic
+resource "google_pubsub_topic" "gke_notifications" {
+  name    = "gke-notifications-topic"
+  project = var.project
+
+  labels = {
+    environment = "example"
+    managed_by  = "terraform"
+  }
+
+  message_retention_duration = "86400s" // 1 day
+}
+
+// Create a Pub/Sub subscription
+// https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/pubsub_subscription
+resource "google_pubsub_subscription" "gke_notifications_sub" {
+  name    = "gke-notifications-subscription"
+  topic   = google_pubsub_topic.gke_notifications.name
+  project = var.project
+
+  labels = {
+    environment = "example"
+    managed_by  = "terraform"
+  }
+
+  // Acknowledge deadline in seconds (10-600)
+  ack_deadline_seconds = 20
+
+  // Retain acknowledged messages for 7 days
+  retain_acked_messages = true
+  message_retention_duration = "604800s" // 7 days
+
+  // Retry policy
+  retry_policy {
+    minimum_backoff = "10s"
+    maximum_backoff = "600s"
+  }
+
+  // Expiration policy - subscription expires if inactive for 31 days
+  expiration_policy {
+    ttl = "2678400s" // 31 days
+  }
+}
+
+// Output the Pub/Sub topic and subscription names
+output "pubsub_topic_name" {
+  description = "The name of the Pub/Sub topic"
+  value       = google_pubsub_topic.gke_notifications.name
+}
+
+output "pubsub_subscription_name" {
+  description = "The name of the Pub/Sub subscription"
+  value       = google_pubsub_subscription.gke_notifications_sub.name
+}
+
