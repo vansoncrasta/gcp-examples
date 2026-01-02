@@ -70,7 +70,7 @@ resource "google_container_cluster" "primary" {
     
     // Enable Workload Identity on nodes
     workload_metadata_config {
-      node_metadata = "GKE_METADATA"
+      mode = "GKE_METADATA"
     }
   }
 
