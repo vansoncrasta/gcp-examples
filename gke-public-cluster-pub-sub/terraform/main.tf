@@ -43,6 +43,23 @@ resource "google_container_cluster" "primary" {
   initial_node_count = 2
   min_master_version = data.google_container_engine_versions.on-prem.latest_master_version
 
+  // Enable Workload Identity
+  workload_identity_config {
+    workload_pool = "${var.project}.svc.id.goog"
+  }
+
+  // Enable monitoring for external metrics
+  monitoring_config {
+    enable_components = ["SYSTEM_COMPONENTS", "WORKLOADS"]
+  }
+
+  // Enable required addons
+  addons_config {
+    horizontal_pod_autoscaling {
+      disabled = false
+    }
+  }
+
   node_config {
     oauth_scopes = [
       "https://www.googleapis.com/auth/compute",
@@ -50,6 +67,11 @@ resource "google_container_cluster" "primary" {
       "https://www.googleapis.com/auth/logging.write",
       "https://www.googleapis.com/auth/monitoring",
     ]
+    
+    // Enable Workload Identity on nodes
+    workload_metadata_config {
+      mode = "GKE_METADATA"
+    }
   }
 
   // These local-execs are used to provision the sample service using Kubernetes manifests
@@ -103,6 +125,30 @@ resource "google_pubsub_subscription" "gke_notifications_sub" {
   }
 }
 
+///////////////////////////////////////////////////////////////////////////////////////
+// Create service account for HPA to access Cloud Monitoring metrics
+///////////////////////////////////////////////////////////////////////////////////////
+
+resource "google_service_account" "hpa_sa" {
+  account_id   = "gke-hpa-metrics"
+  display_name = "GKE HPA Metrics Reader"
+  project      = var.project
+}
+
+// Grant monitoring viewer role to read Pub/Sub metrics
+resource "google_project_iam_member" "hpa_monitoring_viewer" {
+  project = var.project
+  role    = "roles/monitoring.viewer"
+  member  = "serviceAccount:${google_service_account.hpa_sa.email}"
+}
+
+// Allow Kubernetes service account to impersonate GCP service account
+resource "google_service_account_iam_member" "workload_identity_binding" {
+  service_account_id = google_service_account.hpa_sa.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "serviceAccount:${var.project}.svc.id.goog[default/hello-server]"
+}
+
 // Output the Pub/Sub topic and subscription names
 output "pubsub_topic_name" {
   description = "The name of the Pub/Sub topic"
@@ -112,5 +158,10 @@ output "pubsub_topic_name" {
 output "pubsub_subscription_name" {
   description = "The name of the Pub/Sub subscription"
   value       = google_pubsub_subscription.gke_notifications_sub.name
+}
+
+output "hpa_service_account_email" {
+  description = "The email of the service account for HPA metrics"
+  value       = google_service_account.hpa_sa.email
 }
 

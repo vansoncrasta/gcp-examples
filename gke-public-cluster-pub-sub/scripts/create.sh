@@ -39,3 +39,6 @@ source "$ROOT/scripts/generate-tfvars.sh"
 # Initialize and run Terraform
 (cd "$ROOT/terraform"; terraform init -input=false)
 (cd "$ROOT/terraform"; terraform apply -input=false -auto-approve)
+
+# Configure HPA with external metrics support
+"$ROOT"/scripts/configure-hpa.sh

@@ -14,10 +14,11 @@ This example demonstrates:
 
 ## Setup
 ```
+PROJECT_ID will be set by default. If not set, use below command.
 gcloud config set project PROJECT_ID
 
-gcloud config set compute/region us-central1
-gcloud config set compute/zone us-central1-c
+gcloud config set compute/region us-east1
+gcloud config set compute/zone us-east1-b
 
 ```
 

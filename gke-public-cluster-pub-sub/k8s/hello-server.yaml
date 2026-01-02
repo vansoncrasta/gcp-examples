@@ -13,6 +13,19 @@
 # limitations under the License.
 
 ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: hello-server
+  namespace: default
+  annotations:
+    iam.gke.io/gcp-service-account: gke-hpa-metrics@PROJECT_ID.iam.gserviceaccount.com
+  labels:
+    app: hello-server
+    environment: example
+    managed-by: terraform
+
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -32,6 +45,7 @@ spec:
       labels:
         app: hello-server
     spec:
+      serviceAccountName: hello-server
       containers:
       - name: hello-app
         image: gcr.io/google-samples/hello-app:1.0
@@ -77,3 +91,35 @@ spec:
     targetPort: 8080
     protocol: TCP
     name: http
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: hello-server-hpa
+  namespace: default
+  labels:
+    app: hello-server
+    environment: example
+    managed-by: terraform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: hello-server
+  minReplicas: 1
+  maxReplicas: 20
+  metrics:
+  - type: External
+    external:
+      metric:
+        # Note the pipe "|" separator for Google Cloud metrics
+        name: pubsub.googleapis.com|subscription|num_unacked_messages_by_region
+        selector:
+          matchLabels:
+            # This references the subscription created in Terraform
+            resource.labels.subscription_id: "gke-notifications-subscription"
+      target:
+        type: AverageValue
+        # Each pod will attempt to process 10 messages from the backlog
+        averageValue: "10"
