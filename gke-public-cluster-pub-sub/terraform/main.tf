@@ -97,12 +97,6 @@ resource "google_pubsub_subscription" "gke_notifications_sub" {
   retain_acked_messages = true
   message_retention_duration = "604800s" // 7 days
 
-  // Retry policy
-  retry_policy {
-    minimum_backoff = "10s"
-    maximum_backoff = "600s"
-  }
-
   // Expiration policy - subscription expires if inactive for 31 days
   expiration_policy {
     ttl = "2678400s" // 31 days
