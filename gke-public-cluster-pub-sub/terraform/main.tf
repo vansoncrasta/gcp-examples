@@ -48,11 +48,6 @@ resource "google_container_cluster" "primary" {
     workload_pool = "${var.project}.svc.id.goog"
   }
 
-  // Enable monitoring for external metrics
-  monitoring_config {
-    enable_components = ["SYSTEM_COMPONENTS", "WORKLOADS"]
-  }
-
   // Enable required addons
   addons_config {
     horizontal_pod_autoscaling {
