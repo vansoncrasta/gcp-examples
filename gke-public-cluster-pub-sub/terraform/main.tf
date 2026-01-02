@@ -76,8 +76,6 @@ resource "google_pubsub_topic" "gke_notifications" {
     environment = "example"
     managed_by  = "terraform"
   }
-
-  message_retention_duration = "86400s" // 1 day
 }
 
 // Create a Pub/Sub subscription
