@@ -33,6 +33,21 @@ echo "Installing Stackdriver Custom Metrics Adapter..."
 # Install the custom metrics adapter for external metrics
 kubectl apply -f https://raw.githubusercontent.com/GoogleCloudPlatform/k8s-stackdriver/master/custom-metrics-stackdriver-adapter/deploy/production/adapter_new_resource_model.yaml
 
+echo "Waiting for adapter namespace to be created..."
+kubectl wait --for=jsonpath='{.status.phase}'=Active --timeout=60s namespace/custom-metrics || true
+
+# Get the Stackdriver adapter service account email from Terraform output
+ADAPTER_SA_EMAIL=$(cd "$ROOT/terraform"; terraform output -raw stackdriver_adapter_service_account_email)
+
+echo "Annotating Stackdriver adapter service account with Workload Identity..."
+kubectl annotate serviceaccount custom-metrics-stackdriver-adapter \
+  -n custom-metrics \
+  iam.gke.io/gcp-service-account="${ADAPTER_SA_EMAIL}" \
+  --overwrite
+
+echo "Restarting adapter to apply Workload Identity..."
+kubectl rollout restart deployment custom-metrics-stackdriver-adapter -n custom-metrics
+
 echo "Waiting for adapter deployment to be ready..."
 kubectl wait --for=condition=available --timeout=300s deployment/custom-metrics-stackdriver-adapter -n custom-metrics || true
 

@@ -146,6 +146,32 @@ resource "google_service_account_iam_member" "workload_identity_binding" {
   depends_on = [google_container_cluster.primary]
 }
 
+///////////////////////////////////////////////////////////////////////////////////////
+// Create service account for Stackdriver Custom Metrics Adapter
+///////////////////////////////////////////////////////////////////////////////////////
+
+resource "google_service_account" "stackdriver_adapter_sa" {
+  account_id   = "stackdriver-adapter"
+  display_name = "Stackdriver Custom Metrics Adapter"
+  project      = var.project
+}
+
+// Grant monitoring viewer role to the adapter
+resource "google_project_iam_member" "adapter_monitoring_viewer" {
+  project = var.project
+  role    = "roles/monitoring.viewer"
+  member  = "serviceAccount:${google_service_account.stackdriver_adapter_sa.email}"
+}
+
+// Allow adapter's Kubernetes service account to impersonate GCP service account
+resource "google_service_account_iam_member" "adapter_workload_identity_binding" {
+  service_account_id = google_service_account.stackdriver_adapter_sa.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "serviceAccount:${var.project}.svc.id.goog[custom-metrics/custom-metrics-stackdriver-adapter]"
+  
+  depends_on = [google_container_cluster.primary]
+}
+
 // Output the Pub/Sub topic and subscription names
 output "pubsub_topic_name" {
   description = "The name of the Pub/Sub topic"
@@ -160,5 +186,10 @@ output "pubsub_subscription_name" {
 output "hpa_service_account_email" {
   description = "The email of the service account for HPA metrics"
   value       = google_service_account.hpa_sa.email
+}
+
+output "stackdriver_adapter_service_account_email" {
+  description = "The email of the service account for Stackdriver adapter"
+  value       = google_service_account.stackdriver_adapter_sa.email
 }
 
