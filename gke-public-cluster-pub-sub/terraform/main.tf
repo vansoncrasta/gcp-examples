@@ -48,16 +48,9 @@ resource "google_container_cluster" "primary" {
     workload_pool = "${var.project}.svc.id.goog"
   }
 
-  // Enable Cloud Monitoring (native support for external metrics on GKE 1.24+)
-  monitoring_config {
-    enable_components = ["SYSTEM_COMPONENTS", "WORKLOADS"]
-    
-    managed_prometheus {
-      enabled = true
-    }
-  }
-
   // Enable required addons
+  // Note: Cloud Monitoring is enabled by default on GKE 1.24+
+  // and provides native support for external metrics (no adapter needed)
   addons_config {
     horizontal_pod_autoscaling {
       disabled = false
