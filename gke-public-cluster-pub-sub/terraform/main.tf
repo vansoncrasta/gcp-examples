@@ -40,7 +40,7 @@ data "google_container_engine_versions" "on-prem" {
 resource "google_container_cluster" "primary" {
   name               = "gke-public-cluster-example"
   location           = var.zone
-  initial_node_count = 2
+  initial_node_count = 3
   min_master_version = data.google_container_engine_versions.on-prem.latest_master_version
 
   // Enable Workload Identity
