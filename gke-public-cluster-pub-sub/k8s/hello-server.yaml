@@ -13,13 +13,17 @@
 # limitations under the License.
 
 ---
+# Service Account is optional - only needed if your app interacts with GCP services
+# The HPA reads metrics via gke-metrics-agent (managed by GKE), not via your app pods
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: hello-server
   namespace: default
-  annotations:
-    iam.gke.io/gcp-service-account: gke-hpa-metrics@PROJECT_ID.iam.gserviceaccount.com
+  # Uncomment the annotation below only if you created the app service account
+  # and your application needs to access GCP services (Pub/Sub, Cloud Storage, etc.)
+  # annotations:
+  #   iam.gke.io/gcp-service-account: gke-pubsub-app@PROJECT_ID.iam.gserviceaccount.com
   labels:
     app: hello-server
     environment: example

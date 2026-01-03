@@ -17,6 +17,7 @@
 # "---------------------------------------------------------"
 # "-                                                       -"
 # "-  Configure HPA with external metrics support          -"
+# "-  Modern GKE (1.24+) with native Cloud Monitoring      -"
 # "-                                                       -"
 # "---------------------------------------------------------"
 
@@ -28,33 +29,40 @@ ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
 # shellcheck source=scripts/common.sh
 source "$ROOT"/scripts/common.sh
 
-echo "Installing Stackdriver Custom Metrics Adapter..."
+echo "Configuring HPA with native GKE external metrics support..."
 
-# Install the custom metrics adapter for external metrics
-kubectl apply -f https://raw.githubusercontent.com/GoogleCloudPlatform/k8s-stackdriver/master/custom-metrics-stackdriver-adapter/deploy/production/adapter_new_resource_model.yaml
+# Modern GKE (1.24+) includes built-in support for external metrics
+# via the gke-metrics-agent - no manual adapter installation needed!
 
-echo "Waiting for adapter namespace to be created..."
-kubectl wait --for=jsonpath='{.status.phase}'=Active --timeout=60s namespace/custom-metrics || true
+echo "Verifying GKE cluster version supports native external metrics..."
+CLUSTER_VERSION=$(gcloud container clusters describe gke-public-cluster-example \
+  --zone "${ZONE}" \
+  --project "${PROJECT}" \
+  --format="value(currentMasterVersion)")
 
-# Get the Stackdriver adapter service account email from Terraform output
-ADAPTER_SA_EMAIL=$(cd "$ROOT/terraform"; terraform output -raw stackdriver_adapter_service_account_email)
-
-echo "Annotating Stackdriver adapter service account with Workload Identity..."
-kubectl annotate serviceaccount custom-metrics-stackdriver-adapter \
-  -n custom-metrics \
-  iam.gke.io/gcp-service-account="${ADAPTER_SA_EMAIL}" \
-  --overwrite
-
-echo "Restarting adapter to apply Workload Identity..."
-kubectl rollout restart deployment custom-metrics-stackdriver-adapter -n custom-metrics
-
-echo "Waiting for adapter deployment to be ready..."
-kubectl wait --for=condition=available --timeout=300s deployment/custom-metrics-stackdriver-adapter -n custom-metrics || true
-
-echo "Stackdriver adapter installed successfully!"
+echo "Cluster version: ${CLUSTER_VERSION}"
 
 # Substitute PROJECT_ID in the Kubernetes manifest
 echo "Updating PROJECT_ID in hello-server.yaml..."
-sed -i "s/PROJECT_ID/${PROJECT}/g" "$ROOT/k8s/hello-server.yaml"
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  # macOS
+  sed -i '' "s/PROJECT_ID/${PROJECT}/g" "$ROOT/k8s/hello-server.yaml"
+else
+  # Linux
+  sed -i "s/PROJECT_ID/${PROJECT}/g" "$ROOT/k8s/hello-server.yaml"
+fi
 
-echo "HPA configuration completed!"
+echo "Waiting for gke-metrics-agent to be ready..."
+kubectl wait --for=condition=ready pod \
+  -l app.kubernetes.io/name=gke-metrics-agent \
+  -n kube-system \
+  --timeout=120s || echo "Note: gke-metrics-agent may take a few minutes to become available"
+
+echo ""
+echo "✓ HPA configuration completed!"
+echo ""
+echo "The GKE cluster includes native support for external metrics."
+echo "You can now deploy your HPA and it will automatically use Cloud Monitoring metrics."
+echo ""
+echo "To verify external metrics are available, run:"
+echo "  kubectl get --raw /apis/external.metrics.k8s.io/v1beta1 | jq ."

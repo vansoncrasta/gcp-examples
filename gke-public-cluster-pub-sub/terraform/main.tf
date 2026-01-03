@@ -48,6 +48,15 @@ resource "google_container_cluster" "primary" {
     workload_pool = "${var.project}.svc.id.goog"
   }
 
+  // Enable Cloud Monitoring (native support for external metrics on GKE 1.24+)
+  monitoring_config {
+    enable_components = ["SYSTEM_COMPONENTS", "WORKLOADS"]
+    
+    managed_prometheus {
+      enabled = true
+    }
+  }
+
   // Enable required addons
   addons_config {
     horizontal_pod_autoscaling {
@@ -121,53 +130,46 @@ resource "google_pubsub_subscription" "gke_notifications_sub" {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
-// Create service account for HPA to access Cloud Monitoring metrics
+// OPTIONAL: Service account for application with Workload Identity
+//
+// IMPORTANT: This is NOT required for HPA with external metrics to work!
+//
+// The gke-metrics-agent (managed by GKE) reads Pub/Sub metrics from Cloud Monitoring.
+// Your application pods don't need any special permissions for HPA to scale them.
+//
+// Only create this service account if your application needs to:
+//   - Publish or subscribe to Pub/Sub messages
+//   - Access Cloud Storage, Cloud SQL, or other GCP services
+//   - Read Cloud Monitoring metrics for its own purposes
+//
+// The hello-app:1.0 used in this example is just a simple HTTP server and does
+// NOT need this service account. It's included here for demonstration purposes.
 ///////////////////////////////////////////////////////////////////////////////////////
 
-resource "google_service_account" "hpa_sa" {
-  account_id   = "gke-hpa-metrics"
-  display_name = "GKE HPA Metrics Reader"
+resource "google_service_account" "app_sa" {
+  count = var.create_app_service_account ? 1 : 0
+  
+  account_id   = "gke-pubsub-app"
+  display_name = "GKE Pub/Sub Application"
   project      = var.project
 }
 
-// Grant monitoring viewer role to read Pub/Sub metrics
-resource "google_project_iam_member" "hpa_monitoring_viewer" {
+// Grant monitoring viewer role (only if app needs to read metrics directly)
+resource "google_project_iam_member" "app_monitoring_viewer" {
+  count = var.create_app_service_account ? 1 : 0
+  
   project = var.project
   role    = "roles/monitoring.viewer"
-  member  = "serviceAccount:${google_service_account.hpa_sa.email}"
+  member  = "serviceAccount:${google_service_account.app_sa[0].email}"
 }
 
 // Allow Kubernetes service account to impersonate GCP service account
-resource "google_service_account_iam_member" "workload_identity_binding" {
-  service_account_id = google_service_account.hpa_sa.name
+resource "google_service_account_iam_member" "app_workload_identity_binding" {
+  count = var.create_app_service_account ? 1 : 0
+  
+  service_account_id = google_service_account.app_sa[0].name
   role               = "roles/iam.workloadIdentityUser"
   member             = "serviceAccount:${var.project}.svc.id.goog[default/hello-server]"
-  
-  depends_on = [google_container_cluster.primary]
-}
-
-///////////////////////////////////////////////////////////////////////////////////////
-// Create service account for Stackdriver Custom Metrics Adapter
-///////////////////////////////////////////////////////////////////////////////////////
-
-resource "google_service_account" "stackdriver_adapter_sa" {
-  account_id   = "stackdriver-adapter"
-  display_name = "Stackdriver Custom Metrics Adapter"
-  project      = var.project
-}
-
-// Grant monitoring viewer role to the adapter
-resource "google_project_iam_member" "adapter_monitoring_viewer" {
-  project = var.project
-  role    = "roles/monitoring.viewer"
-  member  = "serviceAccount:${google_service_account.stackdriver_adapter_sa.email}"
-}
-
-// Allow adapter's Kubernetes service account to impersonate GCP service account
-resource "google_service_account_iam_member" "adapter_workload_identity_binding" {
-  service_account_id = google_service_account.stackdriver_adapter_sa.name
-  role               = "roles/iam.workloadIdentityUser"
-  member             = "serviceAccount:${var.project}.svc.id.goog[custom-metrics/custom-metrics-stackdriver-adapter]"
   
   depends_on = [google_container_cluster.primary]
 }
@@ -183,13 +185,18 @@ output "pubsub_subscription_name" {
   value       = google_pubsub_subscription.gke_notifications_sub.name
 }
 
-output "hpa_service_account_email" {
-  description = "The email of the service account for HPA metrics"
-  value       = google_service_account.hpa_sa.email
+output "app_service_account_email" {
+  description = "The email of the application service account (only if created)"
+  value       = var.create_app_service_account ? google_service_account.app_sa[0].email : "Not created - not required for HPA"
 }
 
-output "stackdriver_adapter_service_account_email" {
-  description = "The email of the service account for Stackdriver adapter"
-  value       = google_service_account.stackdriver_adapter_sa.email
+output "cluster_name" {
+  description = "The name of the GKE cluster"
+  value       = google_container_cluster.primary.name
+}
+
+output "cluster_location" {
+  description = "The location of the GKE cluster"
+  value       = google_container_cluster.primary.location
 }
 

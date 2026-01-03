@@ -29,3 +29,9 @@ variable "project" {
   type        = string
 }
 
+variable "create_app_service_account" {
+  description = "Whether to create a service account for the application. Only needed if your app interacts with GCP services (Pub/Sub, Cloud Storage, etc.). Not required for HPA to read external metrics."
+  type        = bool
+  default     = false
+}
+
