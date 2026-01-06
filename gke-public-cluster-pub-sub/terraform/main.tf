@@ -243,18 +243,7 @@ resource "google_project_iam_member" "keda_pubsub_viewer" {
   member  = "serviceAccount:${google_service_account.keda_sa.email}"
 }
 
-// Bind KEDA GCP SA to KEDA Kubernetes SAs (operator and metrics-server)
-resource "google_service_account_iam_member" "keda_operator_identity_binding" {
-  service_account_id = google_service_account.keda_sa.name
-  role               = "roles/iam.workloadIdentityUser"
-  member             = "serviceAccount:${var.project}.svc.id.goog[keda/keda-operator]"
-}
 
-resource "google_service_account_iam_member" "keda_metrics_identity_binding" {
-  service_account_id = google_service_account.keda_sa.name
-  role               = "roles/iam.workloadIdentityUser"
-  member             = "serviceAccount:${var.project}.svc.id.goog[keda/keda-metrics-apiserver]"
-}
 
 // Output the Pub/Sub topic and subscription names
 output "pubsub_topic_name" {
