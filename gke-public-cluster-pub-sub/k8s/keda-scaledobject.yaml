@@ -1,0 +1,36 @@
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: gcp-pubsub-auth
+  namespace: default
+spec:
+  podIdentity:
+    provider: gcp
+
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: hello-server-scaler
+  namespace: default
+  labels:
+    app: hello-server
+    environment: example
+    managed-by: terraform
+spec:
+  scaleTargetRef:
+    name: hello-server
+  minReplicaCount: 1
+  maxReplicaCount: 20
+  triggers:
+  - type: gcp-pubsub
+    authenticationRef:
+      name: gcp-pubsub-auth
+    metadata:
+      # This references the subscription ID (not the full name if in same project, but full name is safer)
+      # In this example, the subscription name is "gke-notifications-subscription"
+      subscriptionName: "gke-notifications-subscription"
+      # Standard KEDA metric for backlog size
+      metricName: "numUndeliveredMessages"
+      # Target value (approx messages per pod)
+      targetValue: "10"

@@ -40,7 +40,6 @@ metadata:
     environment: example
     managed-by: terraform
 spec:
-  replicas: 2
   selector:
     matchLabels:
       app: hello-server
@@ -95,35 +94,3 @@ spec:
     targetPort: 8080
     protocol: TCP
     name: http
-
----
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: hello-server-hpa
-  namespace: default
-  labels:
-    app: hello-server
-    environment: example
-    managed-by: terraform
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: hello-server
-  minReplicas: 1
-  maxReplicas: 20
-  metrics:
-  - type: External
-    external:
-      metric:
-        # Note the pipe "|" separator for Google Cloud metrics
-        name: pubsub.googleapis.com|subscription|num_unacked_messages_by_region
-        selector:
-          matchLabels:
-            # This references the subscription created in Terraform
-            resource.labels.subscription_id: "gke-notifications-subscription"
-      target:
-        type: AverageValue
-        # Each pod will attempt to process 10 messages from the backlog
-        averageValue: "10"

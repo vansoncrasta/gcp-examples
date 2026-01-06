@@ -80,7 +80,7 @@ resource "google_container_cluster" "primary" {
   }
 
   provisioner "local-exec" {
-    command = "kubectl apply -f ../k8s/hello-server.yaml"
+    command = "kubectl apply -f ../k8s/"
   }
 }
 
@@ -168,6 +168,54 @@ resource "google_service_account_iam_member" "app_workload_identity_binding" {
   member             = "serviceAccount:${var.project}.svc.id.goog[default/hello-server]"
   
   depends_on = [google_container_cluster.primary]
+}
+
+///////////////////////////////////////////////////////////////////////////////////////
+// Install KEDA via Helm
+///////////////////////////////////////////////////////////////////////////////////////
+
+resource "helm_release" "keda" {
+  name       = "keda"
+  repository = "https://kedacore.github.io/charts"
+  chart      = "keda"
+  namespace  = "keda"
+  create_namespace = true
+
+  set {
+    name  = "podIdentity.activeDirectory.identity"
+    value = "gcp"
+  }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////
+// KEDA Workload Identity Configuration
+///////////////////////////////////////////////////////////////////////////////////////
+
+// Service Account for KEDA Operator
+resource "google_service_account" "keda_sa" {
+  account_id   = "keda-operator-sa"
+  display_name = "KEDA Operator Service Account"
+  project      = var.project
+}
+
+// Grant Pub/Sub Viewer role to KEDA SA so it can read metrics
+resource "google_project_iam_member" "keda_pubsub_viewer" {
+  project = var.project
+  role    = "roles/pubsub.viewer"
+  member  = "serviceAccount:${google_service_account.keda_sa.email}"
+}
+
+// Bind KEDA GCP SA to KEDA Kubernetes SAs (operator and metrics-server)
+resource "google_service_account_iam_member" "keda_operator_identity_binding" {
+  service_account_id = google_service_account.keda_sa.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "serviceAccount:${var.project}.svc.id.goog[keda/keda-operator]"
+}
+
+resource "google_service_account_iam_member" "keda_metrics_identity_binding" {
+  service_account_id = google_service_account.keda_sa.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "serviceAccount:${var.project}.svc.id.goog[keda/keda-metrics-apiserver]"
 }
 
 // Output the Pub/Sub topic and subscription names
