@@ -78,10 +78,48 @@ resource "google_container_cluster" "primary" {
   provisioner "local-exec" {
     command = "gcloud container clusters get-credentials ${google_container_cluster.primary.name} --zone ${google_container_cluster.primary.location} --project ${var.project}"
   }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////
+// Create Pub/Sub resources
+///////////////////////////////////////////////////////////////////////////////////////
+
+// ... (existing code) ...
+
+// Bind KEDA GCP SA to KEDA Kubernetes SAs (operator and metrics-server)
+resource "google_service_account_iam_member" "keda_operator_identity_binding" {
+  service_account_id = google_service_account.keda_sa.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "serviceAccount:${var.project}.svc.id.goog[keda/keda-operator]"
+  
+  depends_on = [google_container_cluster.primary]
+}
+
+resource "google_service_account_iam_member" "keda_metrics_identity_binding" {
+  service_account_id = google_service_account.keda_sa.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "serviceAccount:${var.project}.svc.id.goog[keda/keda-metrics-apiserver]"
+  
+  depends_on = [google_container_cluster.primary]
+}
+
+///////////////////////////////////////////////////////////////////////////////////////
+// Deploy Application & KEDA Resources
+///////////////////////////////////////////////////////////////////////////////////////
+
+resource "null_resource" "deploy_app" {
+  triggers = {
+    always_run = timestamp()
+  }
 
   provisioner "local-exec" {
     command = "kubectl apply -f ../k8s/"
   }
+
+  depends_on = [
+    google_container_cluster.primary,
+    helm_release.keda
+  ]
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
